@@ -1,8 +1,6 @@
 #include <Arduino.h>
 #include <Wire.h> 
-#include <LiquidCrystal_I2C.h> 
 #include <HardwareSerial.h>
-#include <Keypad.h>
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_now.h>
@@ -33,11 +31,8 @@ char keys[ROWS][COLS] = {
 byte rowPins[ROWS] = {13, 12, 14, 27}; 
 byte colPins[COLS] = {26, 25, 33}; 
 
-HardwareSerial sim900(2); 
-LiquidCrystal_I2C lcd(0x27, 16, 2); 
-Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
+HardwareSerial sim900(2);
 
-// --- GLOBAL VARIABLES ---
 String contact1;
 String contact2;
 String emergency;
@@ -123,7 +118,7 @@ void handleAlarmActions() {
     checkResetButton(); 
 
     // Countdown Timer (45 seconds)
-    if (millis() - alarmStartTime >= 45000) {
+    if (millis() - alarmStartTime >= 5000) {
       // If alarm is still armed (user didn't enter PIN)
       if (alarmDisarm) { 
         Serial.println("TIME EXPIRED: Moving to Call Protocol.");
@@ -217,8 +212,6 @@ void setup() {
   pinMode(BTN_SENSOR, INPUT); 
   pinMode(PIN_BUZZER, OUTPUT);
   
-  lcd.init();
-  lcd.backlight();
   
   // --- LOAD SETTINGS FROM MEMORY ---
   preferences.begin("system-config", false); 
@@ -241,7 +234,6 @@ void setup() {
   // --- NORMAL STARTUP ---
   clearSerialBuffer();
   Serial.println("Emergency Call System Starting...");
-  updateLCD("System Start...", " ");
   
   delay(10000); 
   
@@ -274,130 +266,7 @@ void loop() {
   handleAlarmActions(); 
 }
 
-// --- SETUP MODE FUNCTION ---
-void runSetupMode() {
-  updateLCD("SETUP MODE", "Release Button");
-  delay(2000); 
-  while(digitalRead(BTN_RESET) == HIGH); 
 
-  preferences.begin("system-config", false);
-
-  String newC1 = readKeypadInput("Set Contact 1:", contact1);
-  if(newC1.length() > 0) preferences.putString("c1", newC1);
-
-  String newC2 = readKeypadInput("Set Contact 2:", contact2);
-  if(newC2.length() > 0) preferences.putString("c2", newC2);
-
-  String newEm = readKeypadInput("Set Emerg No:", emergency);
-  if(newEm.length() > 0) preferences.putString("em", newEm);
-
-  String newPin = readKeypadInput("Set PIN:", correctPin);
-  if(newPin.length() > 0) preferences.putString("pin", newPin);
-
-  preferences.end();
-
-  updateLCD("Setup Complete", "Restarting...");
-  delay(2000);
-  ESP.restart(); 
-}
-
-// --- HELPER TO READ STRING FROM KEYPAD ---
-String readKeypadInput(String prompt, String currentVal) {
-  String input = "";
-  updateLCD(prompt, input);
-  
-  while(true) {
-    char key = keypad.getKey();
-    
-    if(key) {
-      if(key == '*') {
-        input += "+"; 
-      } else if (key == '#') {
-         if(input.length() > 0) {
-            input.remove(input.length() - 1);
-         }
-      } else {
-        input += key;
-      }
-      updateLCD(prompt, input);
-    }
-
-    if(digitalRead(BTN_ENTER) == HIGH) {
-      delay(300); 
-      return input;
-    }
-    
-    if(digitalRead(BTN_RESET) == HIGH) {
-       delay(300);
-       return currentVal; 
-    }
-  }
-}
-
-void blinkLED() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousBlinkMillis >= 1000) {
-    previousBlinkMillis = currentMillis; 
-    ledState = (ledState == LOW) ? HIGH : LOW;
-    digitalWrite(PIN_LED, ledState);    // Fixed: PIN_LED
-    if(ledState == HIGH) tone(PIN_BUZZER, 1000); // Fixed: PIN_BUZZER
-    if(ledState == LOW) noTone(PIN_BUZZER);      // Fixed: PIN_BUZZER
-  }
-}
-
-void formPin(){
-    char key = keypad.getKey();
-    if(key) {
-      Serial.print("Key Pressed: ");
-      Serial.println(key);
-      currentInput += key;
-      updateLCD("Enter PIN:", currentInput);
-    }
-    checkEnterButton();
-}
-
-void checkEnterButton() {
-  if (digitalRead(BTN_ENTER) == HIGH) { // Fixed: BTN_ENTER
-    delay(200);
-
-    if (alarmActive) {
-        Serial.print("Checking PIN: ");
-        Serial.println(currentInput);
-    
-        if (currentInput == correctPin) {
-          Serial.println("PIN ACCEPTED. Alarm Disabled.");
-          updateLCD("Alarm OFF"," ");
-          alarmActive = false;
-          alarmDisarm = true;
-          digitalWrite(PIN_LED, LOW); // Fixed
-          noTone(PIN_BUZZER);         // Fixed
-          
-          delay(2000);
-          idleState();
-          
-        } else {
-          Serial.println("WRONG PIN.");
-          updateLCD("Wrong PIN", "Try Again");
-          delay(1000);
-          updateLCD("Enter PIN:", "");
-        }
-    }
-    currentInput = "";
-  }
-}
-
-void checkResetButton() {
-  if (digitalRead(BTN_RESET) == HIGH) { // Fixed: BTN_RESET
-    delay(200);
-
-    currentInput = "";
-    Serial.println("Input Cleared by User.");
-
-    if(alarmActive) {
-      updateLCD("Input Cleared", "Enter PIN:");
-    }
-  }
-}
 
 int emergencyContact1() {
   int keyPressed = -1;
@@ -535,16 +404,6 @@ void idleState() {
   alarmDisarm = true; 
   alarmActive = false;
   currentInput = "";
-}
-
-void updateLCD(String line1, String line2) {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  if (line1.length() > 16) line1 = line1.substring(0, 16); 
-  lcd.print(line1);
-  lcd.setCursor(0, 1);
-  if (line2.length() > 16) line2 = line2.substring(0, 16);
-  lcd.print(line2);
 }
 
 void clearSerialBuffer() {
