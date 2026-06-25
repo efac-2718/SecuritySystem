@@ -21,7 +21,8 @@ HardwareSerial displaySerial(1);
 
 HardwareSerial sim900(2);
 uint8_t ROOM101_MAC[] = {0x70, 0x4B, 0xCA, 0x49, 0x16, 0xD0};
-uint8_t WEARABLE_MAC[] = {0x70, 0x4B, 0xCA, 0x49, 0x16, 0xD1};
+uint8_t WEARABLE_MAC[] = {0x0C, 0x4E, 0xA0, 0x66, 0x7C, 0xD0};
+uint8_t ROOM102_MAC[] = {0x68, 0xFE, 0x71, 0xF9, 0x67, 0x5C};
 
 String contact1 = "+94764175179";
 String contact2 = "+94764175179";
@@ -57,7 +58,8 @@ typedef struct fall_heartbeat {
 
 
 fall_message incomingFallPacket;
-room_message myData;
+room_message myData1;
+room_message myData2;
 fall_heartbeat fallData;
 
 
@@ -66,7 +68,8 @@ float receivedGForce = 0;
 unsigned long lastSeen101 = 0;
 bool is101Online = false;
 const unsigned long timeoutLimit = 10000;
-bool lastEmergencyState = false;
+bool lastEmergencyState1 = false;
+bool lastEmergencyState2 = false;
 
 unsigned long lastSeenWearable = 0;
 bool isWearableOnline = false;
@@ -82,7 +85,6 @@ const int   mqtt_port = 1883;
 const char* mqtt_pub_topic = "esp32/employee";
 const char* mqtt_sub_topic = "esp32/wearable1";
 const char* mqtt_emergency_topic = "esp32/emergency";
-const char* mqtt_reset_topic = "esp32/reset";
 
 long lastReconnectAttemptMQTT = 0;
 
@@ -90,7 +92,6 @@ boolean reconnect() {
   	if (client.connect("esp32-client-1")) {
     		client.publish("outTopic","hello world");
     		client.subscribe("inTopic");
-				client.subscribe(mqtt_reset_topic);
 				Serial.println("MQTT Connected!");
 				return true;
   	} else {
@@ -105,15 +106,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 	for (unsigned int i = 0; i < length; i++) message += (char)payload[i];
 
 	StaticJsonDocument<256> doc;
-  if (deserializeJson(doc, message)) { Serial.println("JSON parse error"); return; }
-
-	if (strcmp(topic, mqtt_reset_topic) == 0){
-		if (doc.containsKey("reset")){ 
-			lastEmergencyState = false;
-			myData.emergency = false;
-			clearAlert();
-		}
-	} 
+  if (deserializeJson(doc, message)) { Serial.println("JSON parse error"); return; } 
 }
 
 //-----------------------------------------------
@@ -142,38 +135,72 @@ void startWiFi() {
 //-----------------------------------------------
 //Alert
 //-----------------------------------------------
-void updateDisplay(){
+void updateDisplay1(){
 	DISPLAY_SERIAL.println("101:EMERGENCY");
 	Serial.println("[DISPLAY] Sent: 101:EMERGENCY");
 	
 }
 
-void sendMQTTMessage(){
-	if(strcmp(myData.reason, "MANUAL TRIGGER") == 0){
+void sendMQTTMessage1(){
+	if(strcmp(myData1.reason, "MANUAL TRIGGER") == 0){
 		const char* payload = "{\"type\": \"Button Emergency\", \"location\": \"A1 - A101\"}";
 		client.publish(mqtt_emergency_topic,payload);
 	}
-	else if(strcmp(myData.reason, "FIRE HAZARD") == 0){
+	else if(strcmp(myData1.reason, "FIRE HAZARD") == 0){
 		const char* payload = "{\"type\": \"Fire\", \"location\": \"A1 - A101\"}";
 		client.publish(mqtt_emergency_topic,payload);
 	}
-	else if(strcmp(myData.reason, "GAS LEAK") == 0){
+	else if(strcmp(myData1.reason, "GAS LEAK") == 0){
 		const char* payload = "{\"type\": \"Gas leak\", \"location\": \"A1 - A101\"}";
 		client.publish(mqtt_emergency_topic,payload);
 	}
 }
 
-void alert(){
+void alert1(){
   // Only trigger actions when the state CHANGES to true
-  if (myData.emergency && !lastEmergencyState) {
-    lastEmergencyState = true; // Lock the state
-    updateDisplay();
-    sendMQTTMessage();
-  } 
+  if (myData1.emergency && !lastEmergencyState1) {
+    lastEmergencyState1 = true; // Lock the state
+    updateDisplay1();
+    sendMQTTMessage1();
+  }
 }
-void clearAlert(){
+void clearAlert1(){
 	DISPLAY_SERIAL.println("101:RESET");
 	Serial.println("[DISPLAY] Sent: 101:RESET");
+}
+
+void updateDisplay2(){
+	DISPLAY_SERIAL.println("102:EMERGENCY");
+	Serial.println("[DISPLAY] Sent: 102:EMERGENCY");
+	
+}
+
+void sendMQTTMessage2(){
+	if(strcmp(myData2.reason, "MANUAL TRIGGER") == 0){
+		const char* payload = "{\"type\": \"Button Emergency\", \"location\": \"A1 - A102\"}";
+		client.publish(mqtt_emergency_topic,payload);
+	}
+	else if(strcmp(myData2.reason, "FIRE HAZARD") == 0){
+		const char* payload = "{\"type\": \"Fire\", \"location\": \"A1 - A102\"}";
+		client.publish(mqtt_emergency_topic,payload);
+	}
+	else if(strcmp(myData2.reason, "GAS LEAK") == 0){
+		const char* payload = "{\"type\": \"Gas leak\", \"location\": \"A1 - A102\"}";
+		client.publish(mqtt_emergency_topic,payload);
+	}
+}
+
+void alert2(){
+  // Only trigger actions when the state CHANGES to true
+  if (myData2.emergency && !lastEmergencyState2) {
+    lastEmergencyState2 = true; // Lock the state
+    updateDisplay2();
+    sendMQTTMessage2();
+  }
+}
+void clearAlert2(){
+	DISPLAY_SERIAL.println("102:RESET");
+	Serial.println("[DISPLAY] Sent: 102:RESET");
 }
 
 //-----------------------------------------------
@@ -189,36 +216,64 @@ void initESPNow() {
 	esp_now_register_recv_cb(onDataRecv);
 }
 
-void alive(){
+void alive1(){
 				DISPLAY_SERIAL.println("101:ONLINE");
 				//Identify change of status.
 				Serial.println("[DISPLAY] Sent: 101:ONLINE");
 				Serial.println("Room 101 is ONLINE");
 }
 
-void dead() {
+void alive2(){
+				DISPLAY_SERIAL.println("102:ONLINE");
+				//Identify change of status.
+				Serial.println("[DISPLAY] Sent: 102:ONLINE");
+				Serial.println("Room 102 is ONLINE");
+}
+
+void dead1() {
 			DISPLAY_SERIAL.println("101:OFFLINE");
 			Serial.println("[DISPLAY] Sent: 101:OFFLINE");
 			Serial.println("[WARNING] Room 101 heartbeat lost - OFFLINE");
 }
 
-bool connectionLost = false;
-unsigned long lastPacketTime = 0;
+void dead2() {
+			DISPLAY_SERIAL.println("102:OFFLINE");
+			Serial.println("[DISPLAY] Sent: 102:OFFLINE");
+			Serial.println("[WARNING] Room 102 heartbeat lost - OFFLINE");
+}
 
+void checkReset1(){
+    if (!myData1.emergency && lastEmergencyState1) {
+        lastEmergencyState1 = false;
+        clearAlert1();
+    }
+}
 
-unsigned long lastFallAlarmTime = 0;
+void checkReset2(){
+    if (!myData2.emergency && lastEmergencyState2) {
+        lastEmergencyState2 = false;
+        clearAlert2();
+    }
+}
+
+bool connectionLost1 = false;
+bool connectionLost2 = false;
+unsigned long lastPacketTime1 = 0;
+unsigned long lastPacketTime2 = 0;
+
 const unsigned long FALL_ALARM_COOLDOWN = 300000;
+unsigned long lastFallAlarmTime = -FALL_ALARM_COOLDOWN;
 
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
 
 	//---------------Room-101 packet---------------------------
 	if (memcmp(info->src_addr, ROOM101_MAC, 6) == 0) {
-			lastPacketTime = millis();
-		if (len == sizeof(myData)) {
-			memcpy(&myData, incomingData, sizeof(myData));
-			if (connectionLost) {
-					connectionLost = false;
-					alive();
+			lastPacketTime1 = millis();
+		if (len == sizeof(myData1)) {
+			memcpy(&myData1, incomingData, sizeof(myData1));
+			if (connectionLost1) {
+					connectionLost1 = false;
+					alive1();
 			}
 		} 
 	}  // --------------- Wearable packet ---------------------------
@@ -250,18 +305,35 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, in
             		Serial.print("Warning: Wearable packet size unrecognized. Got ");
             		Serial.println(len);
         	}
+    } else if(memcmp(info->src_addr, ROOM102_MAC, 6) == 0){
+        	lastPacketTime2 = millis();
+		      if (len == sizeof(myData2)) {
+			    memcpy(&myData2, incomingData, sizeof(myData2));
+			      if (connectionLost2) {
+					    connectionLost2 = false;
+					    alive2();
+			}
+		} 
     }
 }
 
-void listening(){
+void listening1(){
 	unsigned long timeout = 5000;
 
-	if ((millis() - lastPacketTime > timeout) && !connectionLost){
-		connectionLost = true;
-		dead();
+	if ((millis() - lastPacketTime1 > timeout) && !connectionLost1){
+		connectionLost1 = true;
+		dead1();
 	}
 }
 
+void listening2(){
+	unsigned long timeout = 5000;
+
+	if ((millis() - lastPacketTime2 > timeout) && !connectionLost2){
+		connectionLost2 = true;
+		dead2();
+	}
+}
 //----------------------------------------------
 
 //----------------------------------------------
@@ -484,9 +556,9 @@ void checkFallStatus() {
     triggerEmergencyProtocol();
   }
 }
-
-
 //----------------------------------------------
+
+
 void setup() {
     	Serial.begin(115200);
     	startWiFi();
@@ -544,13 +616,18 @@ void loop() {
 //-----------------------------------------------
 //ESP-NOW Heartbeats
 //-----------------------------------------------
-listening();
+listening1();
+listening2();
 //-----------------------------------------------
 
 //-----------------------------------------------
 //room-alerts
 //-----------------------------------------------
-alert();
+alert1();
+alert2();
+
+checkReset1();
+checkReset2();
 //-----------------------------------------------
 
 //-----------------------------------------------
